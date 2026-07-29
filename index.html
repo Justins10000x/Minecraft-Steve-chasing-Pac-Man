@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BLOCK HUNTER — voxel miner vs. maze muncher</title>
+<meta name="description" content="An arcade maze game where you play the hunter, not the hunted. Chase a pellet-munching chomper through a procedurally generated maze before it eats the level clean.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   BLOCK HUNTER
+   Visual direction: a 1980s arcade cabinet built out of cobblestone.
+   Pixel-bitmap display type on a screen-printed amber marquee, a chunky
+   beveled stone bezel, and gauges set into the frame like physical readouts.
+   ========================================================================== */
+
+:root {
+  /* Palette — pulled from the two worlds this game mashes together */
+  --bedrock:     #16141c;  /* deep slate, the void behind the cabinet */
+  --stone:       #4a4f5c;  /* maze wall face */
+  --stone-lit:   #676d7e;  /* wall top bevel */
+  --stone-dark:  #2c2f38;  /* wall shadow */
+  --marquee:     #f2b134;  /* arcade amber, also the pellet gold */
+  --pellet:      #f2b134;
+  --danger:      #e0523c;  /* powered chomper, low lives */
+  --miner-teal:  #35b7a6;  /* the miner's shirt */
+  --paper:       #ece5d5;  /* bone white text */
+  --paper-dim:   #8d8879;
+
+  --bezel-gap: clamp(10px, 2.2vw, 22px);
+  --radius: 4px;
+
+  --font-display: "Silkscreen", "Courier New", monospace;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bedrock);
+  color: var(--paper);
+  font-family: var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  /* Faint cobble speckle so the void isn't flat black */
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(53,183,166,.06), transparent 45%),
+    radial-gradient(circle at 82% 72%, rgba(242,177,52,.05), transparent 45%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: clamp(14px, 3vw, 40px) clamp(10px, 3vw, 28px) 48px;
+}
+
+.cabinet {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2.4vw, 22px);
+}
+
+/* ---------- Marquee ------------------------------------------------------ */
+
+.marquee { text-align: center; }
+
+.marquee__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(28px, 7.2vw, 58px);
+  letter-spacing: .06em;
+  line-height: 1;
+  margin: 0;
+  color: var(--marquee);
+  /* Screen-printed offset, like ink misregistration on a real marquee */
+  text-shadow:
+    3px 3px 0 var(--stone-dark),
+    5px 5px 0 rgba(224, 82, 60, .55);
+  animation: power-on 900ms steps(1) 1;
+}
+
+@keyframes power-on {
+  0%, 22%   { opacity: 0; }
+  30%, 42%  { opacity: 1; }
+  48%       { opacity: .25; }
+  60%, 100% { opacity: 1; }
+}
+
+.marquee__sub {
+  font-family: var(--font-display);
+  font-size: clamp(9px, 1.9vw, 12px);
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  margin: 12px 0 0;
+}
+
+/* ---------- Bezel: the stone frame --------------------------------------- */
+
+.bezel {
+  width: 100%;
+  padding: var(--bezel-gap);
+  background: var(--stone);
+  border-radius: var(--radius);
+  /* Chunky voxel bevel — light on top-left, shadow on bottom-right */
+  box-shadow:
+    inset 4px 4px 0 var(--stone-lit),
+    inset -4px -4px 0 var(--stone-dark),
+    0 18px 40px -12px rgba(0,0,0,.85);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bezel-gap);
+}
+
+/* ---------- Gauges set into the frame ------------------------------------ */
+
+.gauges {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.gauge {
+  background: var(--stone-dark);
+  border-radius: 2px;
+  padding: 7px 4px 8px;
+  text-align: center;
+  box-shadow: inset 0 2px 0 rgba(0,0,0,.4);
+  min-width: 0;
+}
+
+.gauge__label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gauge__value {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(14px, 3.4vw, 20px);
+  color: var(--marquee);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge--lives .gauge__value {
+  color: var(--danger);
+  letter-spacing: .12em;
+}
+
+/* ---------- Screen ------------------------------------------------------- */
+
+.screen {
+  position: relative;
+  background: #0b0a10;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 2px #000, inset 0 0 34px rgba(0,0,0,.9);
+  line-height: 0;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0,0,0,.16) 0 1px,
+    transparent 1px 3px
+  );
+  mix-blend-mode: multiply;
+}
+
+/* ---------- Overlay screens ---------------------------------------------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(11, 10, 16, .88);
+  line-height: normal;
+  transition: opacity 140ms ease;
+}
+
+.overlay[hidden] { display: none; }
+
+.overlay__card {
+  max-width: 380px;
+  text-align: center;
+}
+
+.overlay__eyebrow {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--miner-teal);
+  margin: 0 0 10px;
+}
+
+.overlay__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(20px, 5vw, 30px);
+  letter-spacing: .04em;
+  color: var(--marquee);
+  margin: 0 0 12px;
+  text-shadow: 2px 2px 0 var(--stone-dark);
+}
+
+.overlay__body {
+  font-size: clamp(12px, 2.6vw, 14px);
+  line-height: 1.55;
+  color: var(--paper);
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+
+.overlay__hint {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  margin: 14px 0 0;
+}
+
+/* ---------- Buttons ------------------------------------------------------ */
+
+.btn {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--bedrock);
+  background: var(--marquee);
+  border: 0;
+  border-radius: 2px;
+  padding: 13px 22px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #a8761d;
+  transition: transform 70ms ease, box-shadow 70ms ease;
+}
+
+.btn:hover { background: #ffc74e; }
+
+/* Depresses like a real cabinet button */
+.btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #a8761d;
+}
+
+.btn:focus-visible,
+.switch:focus-visible,
+.dpad__btn:focus-visible {
+  outline: 3px solid var(--miner-teal);
+  outline-offset: 3px;
+}
+
+/* ---------- Power bar ---------------------------------------------------- */
+
+.powerbar {
+  position: relative;
+  height: 20px;
+  background: var(--stone-dark);
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 0 rgba(0,0,0,.4);
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.powerbar.is-active { opacity: 1; }
+
+.powerbar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--danger);
+  transition: width 90ms linear;
+}
+
+.powerbar__label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--paper);
+  text-shadow: 1px 1px 0 rgba(0,0,0,.7);
+}
+
+/* ---------- Controls ----------------------------------------------------- */
+
+.controls {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(3, 44px);
+  gap: 4px;
+}
+
+.dpad__btn {
+  background: var(--stone);
+  color: var(--paper);
+  border: 0;
+  border-radius: 2px;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: inset 2px 2px 0 var(--stone-lit), inset -2px -2px 0 var(--stone-dark);
+  transition: background 70ms ease;
+  touch-action: manipulation;
+}
+
+.dpad__btn:hover  { background: var(--stone-lit); }
+.dpad__btn:active { background: var(--miner-teal); color: var(--bedrock); }
+
+.dpad__btn--up    { grid-area: 1 / 2; }
+.dpad__btn--left  { grid-area: 2 / 1; }
+.dpad__btn--right { grid-area: 2 / 3; }
+.dpad__btn--down  { grid-area: 3 / 2; }
+
+.switches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.switch {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--stone-dark);
+  border: 0;
+  border-radius: 2px;
+  padding: 11px 13px;
+  cursor: pointer;
+  box-shadow: inset 1px 1px 0 var(--stone);
+  transition: color 70ms ease, background 70ms ease;
+}
+
+.switch:hover { background: var(--stone); color: var(--marquee); }
+
+/* ---------- Colophon ----------------------------------------------------- */
+
+.colophon {
+  max-width: 640px;
+  text-align: center;
+}
+
+.colophon p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--paper-dim);
+  margin: 0;
+}
+
+.colophon__key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  background: var(--k);
+  margin-right: 4px;
+  vertical-align: baseline;
+}
+
+.colophon__sep { margin: 0 8px; color: var(--stone); }
+
+/* ---------- Responsive --------------------------------------------------- */
+
+@media (max-width: 520px) {
+  .gauges { grid-template-columns: repeat(2, 1fr); }
+  .controls { justify-content: center; }
+  .switches { justify-content: center; }
+}
+
+/* Pointer-capable devices don't need the on-screen d-pad taking up space */
+@media (hover: hover) and (pointer: fine) {
+  .dpad { display: none; }
+  .controls { justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .marquee__title { opacity: 1; }
+}
+</style>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2316141c'/><rect x='3' y='3' width='10' height='4' fill='%233a2a1a'/><rect x='4' y='6' width='8' height='4' fill='%23c99a6b'/><rect x='3' y='10' width='10' height='3' fill='%2335b7a6'/></svg>">
+</head>
+<body>
+
+<main class="cabinet">
+
+  <header class="marquee">
+    <h1 class="marquee__title" data-text="BLOCK HUNTER">BLOCK HUNTER</h1>
+    <p class="marquee__sub">You are the one doing the chasing</p>
+  </header>
+
+  <!-- Cabinet bezel: stone-block frame holding the screen -->
+  <div class="bezel">
+
+    <div class="gauges" role="status" aria-live="off">
+      <div class="gauge">
+        <span class="gauge__label">Score</span>
+        <span class="gauge__value" id="score">0</span>
+      </div>
+      <div class="gauge">
+        <span class="gauge__label">Level</span>
+        <span class="gauge__value" id="level">1</span>
+      </div>
+      <div class="gauge">
+        <span class="gauge__label">Pellets left</span>
+        <span class="gauge__value" id="pellets">0</span>
+      </div>
+      <div class="gauge gauge--lives">
+        <span class="gauge__label">Lives</span>
+        <span class="gauge__value" id="lives" aria-label="3 lives remaining">&#9632;&#9632;&#9632;</span>
+      </div>
+    </div>
+
+    <div class="screen">
+      <canvas id="game" width="648" height="504" aria-label="Game maze. Use arrow keys or W A S D to move the miner and catch the chomper."></canvas>
+      <div class="scanlines" aria-hidden="true"></div>
+
+      <!-- Overlay screens -->
+      <div class="overlay" id="overlay">
+        <div class="overlay__card">
+          <p class="overlay__eyebrow" id="ov-eyebrow">Insert coin</p>
+          <h2 class="overlay__title" id="ov-title">BLOCK HUNTER</h2>
+          <p class="overlay__body" id="ov-body">
+            The chomper is eating your maze. Corner it before the last pellet goes.
+            Grab a gold pellet and it turns on you for six seconds — stay clear.
+          </p>
+          <button class="btn" id="ov-btn" type="button">Start hunting</button>
+          <p class="overlay__hint">Arrow keys or W A S D &middot; swipe on touch</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="powerbar" id="powerbar" aria-hidden="true">
+      <div class="powerbar__fill" id="powerbar-fill"></div>
+      <span class="powerbar__label">Chomper is hunting you</span>
+    </div>
+
+  </div>
+
+  <!-- Physical-feeling cabinet controls -->
+  <div class="controls">
+    <div class="dpad" role="group" aria-label="Directional controls">
+      <button class="dpad__btn dpad__btn--up"    data-dir="up"    type="button" aria-label="Move up">&#9650;</button>
+      <button class="dpad__btn dpad__btn--left"  data-dir="left"  type="button" aria-label="Move left">&#9664;</button>
+      <button class="dpad__btn dpad__btn--right" data-dir="right" type="button" aria-label="Move right">&#9654;</button>
+      <button class="dpad__btn dpad__btn--down"  data-dir="down"  type="button" aria-label="Move down">&#9660;</button>
+    </div>
+    <div class="switches">
+      <button class="switch" id="btn-sound" type="button" aria-pressed="true">Sound: on</button>
+      <button class="switch" id="btn-pause" type="button">Pause</button>
+      <button class="switch" id="btn-restart" type="button">New game</button>
+    </div>
+  </div>
+
+  <footer class="colophon">
+    <p>
+      <span class="colophon__key" style="--k:var(--miner-teal)"></span> the miner, run by you
+      <span class="colophon__sep">/</span>
+      <span class="colophon__key" style="--k:var(--pellet)"></span> the chomper, run by a breadth-first search that wants to be anywhere you are not
+    </p>
+  </footer>
+
+</main>
+
+<script>
+/* =============================================================================
+ * BLOCK HUNTER
+ * A maze arcade game with the classic roles reversed: you are the hunter.
+ *
+ * The chomper is not scripted. Every time it reaches a tile it runs two
+ * breadth-first searches — one out from you, one out from every remaining
+ * pellet — and picks the exit that keeps it far from you and near its food.
+ * Eat a gold pellet and the sign flips: for a few seconds it hunts you back.
+ *
+ * No build step, no dependencies. Open index.html and it runs.
+ * ========================================================================== */
+
+(function () {
+  'use strict';
+
+  /* ---------------------------------------------------------------------
+   * 1. Configuration
+   * ------------------------------------------------------------------ */
+
+  const TILE = 24;
+  const COLS = 27;              // must be odd
+  const ROWS = 21;              // must be odd
+  const CELL_COLS = (COLS - 1) / 2;
+  const CELL_ROWS = (ROWS - 1) / 2;
+
+  const WALL = 1;
+  const OPEN = 0;
+
+  const PLAYER_SPEED = 6.6;     // tiles per second
+  const CHOMPER_BASE_SPEED = 5.5;
+  const CHOMPER_SPEED_PER_LEVEL = 0.22;
+  const CHOMPER_SPEED_CAP = PLAYER_SPEED * 0.955; // always catchable, barely
+
+  const POWER_MS_BASE = 5600;
+  const POWER_MS_PER_LEVEL = 220;
+  const POWER_MS_CAP = 8600;
+
+  const BRAID_CHANCE = 0.88;    // how aggressively dead ends are opened into loops
+  const CATCH_RADIUS = TILE * 0.68;
+  const START_LIVES = 3;
+
+  const DIRS = [
+    { x: 0,  y: -1, name: 'up' },
+    { x: 0,  y: 1,  name: 'down' },
+    { x: -1, y: 0,  name: 'left' },
+    { x: 1,  y: 0,  name: 'right' }
+  ];
+
+  /* ---------------------------------------------------------------------
+   * 2. Sprite — the miner, as an editable pixel grid
+   *    Change these strings and the character changes. That's the whole
+   *    asset pipeline.
+   * ------------------------------------------------------------------ */
+
+  const PALETTE = {
+    H: '#3b2a1c',  // hair
+    S: '#cf9d6c',  // skin
+    E: '#1e2b52',  // eye
+    M: '#6b4a33',  // mouth
+    T: '#35b7a6',  // shirt
+    A: '#cf9d6c',  // arms
+    L: '#3f4694',  // legs
+    '.': null      // transparent
+  };
+
+  const MINER_FRAMES = [
+    [
+      '.HHHHHH.',
+      'HHHHHHHH',
+      'HSSSSSSH',
+      '.SESSES.',
+      '.SSMMSS.',
+      'ATTTTTTA',
+      'ATTTTTTA',
+      '.LL..LL.'
+    ],
+    [
+      '.HHHHHH.',
+      'HHHHHHHH',
+      'HSSSSSSH',
+      '.SESSES.',
+      '.SSMMSS.',
+      'ATTTTTTA',
+      'ATTTTTTA',
+      '..LLLL..'
+    ]
+  ];
+
+  /* ---------------------------------------------------------------------
+   * 3. Grid helpers
+   * ------------------------------------------------------------------ */
+
+  const idx = (x, y) => y * COLS + x;
+  const inBounds = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
+
+  /**
+   * Randomised depth-first carve on the odd-tile lattice, then "braided":
+   * dead ends get an extra wall knocked out so the maze is full of loops.
+   * A perfect maze makes a miserable chase — every corridor is a trap and
+   * the hunt turns into a formality. Loops give the chomper somewhere to run.
+   */
+  function generateMaze() {
+    const grid = new Uint8Array(COLS * ROWS).fill(WALL);
+    const visited = new Uint8Array(CELL_COLS * CELL_ROWS);
+    const t = (i) => 2 * i + 1;
+
+    const stack = [[0, 0]];
+    visited[0] = 1;
+    grid[idx(t(0), t(0))] = OPEN;
+
+    while (stack.length) {
+      const [i, j] = stack[stack.length - 1];
+      const options = [];
+      if (i > 0                 && !visited[j * CELL_COLS + i - 1]) options.push([-1, 0]);
+      if (i < CELL_COLS - 1     && !visited[j * CELL_COLS + i + 1]) options.push([1, 0]);
+      if (j > 0                 && !visited[(j - 1) * CELL_COLS + i]) options.push([0, -1]);
+      if (j < CELL_ROWS - 1     && !visited[(j + 1) * CELL_COLS + i]) options.push([0, 1]);
+
+      if (!options.length) { stack.pop(); continue; }
+
+      const [di, dj] = options[(Math.random() * options.length) | 0];
+      const ni = i + di, nj = j + dj;
+      visited[nj * CELL_COLS + ni] = 1;
+      grid[idx(t(i) + di, t(j) + dj)] = OPEN;
+      grid[idx(t(ni), t(nj))] = OPEN;
+      stack.push([ni, nj]);
+    }
+
+    for (let j = 0; j < CELL_ROWS; j++) {
+      for (let i = 0; i < CELL_COLS; i++) {
+        const x = t(i), y = t(j);
+        const open = DIRS.filter(d => grid[idx(x + d.x, y + d.y)] === OPEN);
+        if (open.length > 1 || Math.random() > BRAID_CHANCE) continue;
+
+        const closed = DIRS.filter(d => {
+          const nx = x + d.x, ny = y + d.y;
+          return grid[idx(nx, ny)] === WALL &&
+                 nx > 0 && nx < COLS - 1 && ny > 0 && ny < ROWS - 1;
+        });
+        if (closed.length) {
+          const d = closed[(Math.random() * closed.length) | 0];
+          grid[idx(x + d.x, y + d.y)] = OPEN;
+        }
+      }
+    }
+
+    return grid;
+  }
+
+  /** Breadth-first flood from one or more sources. Returns step distances. */
+  function flood(grid, sources) {
+    const dist = new Int32Array(COLS * ROWS).fill(-1);
+    const queue = [];
+    for (const [sx, sy] of sources) {
+      if (!inBounds(sx, sy) || grid[idx(sx, sy)] === WALL) continue;
+      dist[idx(sx, sy)] = 0;
+      queue.push(idx(sx, sy));
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const cur = queue[head];
+      const cx = cur % COLS, cy = (cur / COLS) | 0;
+      for (const d of DIRS) {
+        const nx = cx + d.x, ny = cy + d.y;
+        if (!inBounds(nx, ny)) continue;
+        const n = idx(nx, ny);
+        if (grid[n] === WALL || dist[n] !== -1) continue;
+        dist[n] = dist[cur] + 1;
+        queue.push(n);
+      }
+    }
+    return dist;
+  }
+
+  /* ---------------------------------------------------------------------
+   * 4. Entities
+   * ------------------------------------------------------------------ */
+
+  function makeEntity(x, y, speed) {
+    return {
+      cx: x, cy: y,      // tile currently leaving
+      nx: x, ny: y,      // tile currently entering
+      t: 0,              // 0..1 progress between them
+      dir: null,
+      queued: null,
+      speed,
+      anim: 0
+    };
+  }
+
+  const pixelX = (e) => (e.cx + (e.nx - e.cx) * e.t + 0.5) * TILE;
+  const pixelY = (e) => (e.cy + (e.ny - e.cy) * e.t + 0.5) * TILE;
+
+  function canEnter(grid, x, y) {
+    return inBounds(x, y) && grid[idx(x, y)] === OPEN;
+  }
+
+  /* ---------------------------------------------------------------------
+   * 5. Game state
+   * ------------------------------------------------------------------ */
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const dom = {
+    score:     document.getElementById('score'),
+    level:     document.getElementById('level'),
+    pellets:   document.getElementById('pellets'),
+    lives:     document.getElementById('lives'),
+    overlay:   document.getElementById('overlay'),
+    eyebrow:   document.getElementById('ov-eyebrow'),
+    title:     document.getElementById('ov-title'),
+    body:      document.getElementById('ov-body'),
+    button:    document.getElementById('ov-btn'),
+    powerbar:  document.getElementById('powerbar'),
+    powerfill: document.getElementById('powerbar-fill'),
+    sound:     document.getElementById('btn-sound'),
+    pause:     document.getElementById('btn-pause'),
+    restart:   document.getElementById('btn-restart')
+  };
+
+  const game = {
+    mode: 'title',      // title | playing | paused | respawn | between | over
+    grid: null,
+    pellets: null,      // 0 none, 1 pellet, 2 power pellet
+    pelletCount: 0,
+    mazeLayer: null,    // pre-rendered walls
+    player: null,
+    chomper: null,
+    score: 0,
+    level: 1,
+    lives: START_LIVES,
+    powerUntil: 0,
+    powerTotal: 0,
+    levelStart: 0,
+    respawnUntil: 0,
+    particles: [],
+    lastFrame: 0
+  };
+
+  /* ---------------------------------------------------------------------
+   * 6. Audio — synthesised, so the repo ships no binary assets
+   * ------------------------------------------------------------------ */
+
+  const audio = {
+    ctx: null,
+    on: true,
+    ensure() {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) this.ctx = new AC();
+      }
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    blip(freq, dur, type = 'square', vol = 0.05) {
+      if (!this.on || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(gain).connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + dur);
+    },
+    sweep(from, to, dur, vol = 0.06) {
+      if (!this.on || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(from, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(to, 1), now + dur);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(gain).connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + dur);
+    },
+    arpeggio(notes, step = 0.08) {
+      notes.forEach((f, i) => setTimeout(() => this.blip(f, 0.12, 'square', 0.06), i * step * 1000));
+    }
+  };
+
+  /* ---------------------------------------------------------------------
+   * 7. Level setup
+   * ------------------------------------------------------------------ */
+
+  function openTiles(grid) {
+    const list = [];
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++)
+        if (grid[idx(x, y)] === OPEN) list.push([x, y]);
+    return list;
+  }
+
+  /** Farthest open tile from a given point, by step count. */
+  function farthestFrom(grid, x, y) {
+    const dist = flood(grid, [[x, y]]);
+    let best = [x, y], bestD = -1;
+    for (let ty = 0; ty < ROWS; ty++) {
+      for (let tx = 0; tx < COLS; tx++) {
+        const d = dist[idx(tx, ty)];
+        if (d > bestD) { bestD = d; best = [tx, ty]; }
+      }
+    }
+    return best;
+  }
+
+  function buildLevel() {
+    game.grid = generateMaze();
+    const tiles = openTiles(game.grid);
+
+    // Pellets everywhere, power pellets in the four extremities
+    game.pellets = new Uint8Array(COLS * ROWS);
+    for (const [x, y] of tiles) game.pellets[idx(x, y)] = 1;
+
+    const corners = [[1, 1], [COLS - 2, 1], [1, ROWS - 2], [COLS - 2, ROWS - 2]];
+    for (const [gx, gy] of corners) {
+      let best = null, bestD = Infinity;
+      for (const [x, y] of tiles) {
+        const d = Math.abs(x - gx) + Math.abs(y - gy);
+        if (d < bestD && game.pellets[idx(x, y)] === 1) { bestD = d; best = [x, y]; }
+      }
+      if (best) game.pellets[idx(best[0], best[1])] = 2;
+    }
+
+    game.pelletCount = tiles.length;
+
+    // Start them as far apart as the maze allows
+    const seed = tiles[(Math.random() * tiles.length) | 0];
+    const pStart = farthestFrom(game.grid, seed[0], seed[1]);
+    const cStart = farthestFrom(game.grid, pStart[0], pStart[1]);
+
+    game.player = makeEntity(pStart[0], pStart[1], PLAYER_SPEED);
+    game.chomper = makeEntity(cStart[0], cStart[1], chomperSpeed());
+
+    // The tiles they stand on start clean
+    consumePellet(pStart[0], pStart[1], false);
+    consumePellet(cStart[0], cStart[1], false);
+
+    game.mazeLayer = renderMazeLayer(game.grid);
+    game.powerUntil = 0;
+    game.levelStart = performance.now();
+    game.particles = [];
+    updateHud();
+  }
+
+  function chomperSpeed() {
+    return Math.min(
+      CHOMPER_BASE_SPEED + (game.level - 1) * CHOMPER_SPEED_PER_LEVEL,
+      CHOMPER_SPEED_CAP
+    );
+  }
+
+  function consumePellet(x, y, byChomper) {
+    const i = idx(x, y);
+    const kind = game.pellets[i];
+    if (!kind) return;
+    game.pellets[i] = 0;
+    game.pelletCount--;
+
+    if (byChomper) {
+      if (kind === 2) {
+        game.powerTotal = Math.min(POWER_MS_BASE + game.level * POWER_MS_PER_LEVEL, POWER_MS_CAP);
+        game.powerUntil = performance.now() + game.powerTotal;
+        audio.sweep(180, 640, 0.35, 0.07);
+        spawnBurst(x, y, '#e0523c', 22);
+      } else {
+        audio.blip(520 + Math.random() * 60, 0.05, 'square', 0.028);
+      }
+    }
+    updateHud();
+  }
+
+  /* ---------------------------------------------------------------------
+   * 8. The chomper's brain
+   * ------------------------------------------------------------------ */
+
+  function chooseChomperDir() {
+    const c = game.chomper;
+    const powered = performance.now() < game.powerUntil;
+
+    const playerDist = flood(game.grid, [[game.player.cx, game.player.cy]]);
+
+    // Multi-source flood from every pellet gives "steps to nearest food"
+    // for every tile in one pass.
+    let pelletDist = null;
+    if (game.pelletCount > 0 && !powered) {
+      const sources = [];
+      for (let y = 0; y < ROWS; y++)
+        for (let x = 0; x < COLS; x++)
+          if (game.pellets[idx(x, y)]) sources.push([x, y]);
+      pelletDist = flood(game.grid, sources);
+    }
+
+    const reverse = c.dir ? { x: -c.dir.x, y: -c.dir.y } : null;
+    let candidates = DIRS.filter(d => canEnter(game.grid, c.cx + d.x, c.cy + d.y));
+    const forward = candidates.filter(d => !reverse || d.x !== reverse.x || d.y !== reverse.y);
+    if (forward.length && !powered) candidates = forward;
+    if (!candidates.length) return null;
+
+    let best = candidates[0], bestScore = -Infinity;
+
+    for (const d of candidates) {
+      const i = idx(c.cx + d.x, c.cy + d.y);
+      const toPlayer = playerDist[i] < 0 ? 99 : playerDist[i];
+      let score;
+
+      if (powered) {
+        // Hunt the hunter.
+        score = -toPlayer * 4;
+      } else {
+        // Panic scales with proximity: far away it grazes calmly, up close
+        // survival outweighs appetite entirely.
+        const panic = toPlayer < 4 ? 6 : toPlayer < 9 ? 2.4 : 0.35;
+        const food = pelletDist && pelletDist[i] >= 0 ? pelletDist[i] : 0;
+        score = panic * toPlayer - food * 1.1;
+      }
+
+      score += Math.random() * 0.8;  // enough jitter to stop it looking robotic
+      if (score > bestScore) { bestScore = score; best = d; }
+    }
+
+    return best;
+  }
+
+  /* ---------------------------------------------------------------------
+   * 9. Simulation
+   * ------------------------------------------------------------------ */
+
+  function stepEntity(e, dt, onArrive) {
+    if (!e.dir && !e.queued) return;
+
+    if (e.cx === e.nx && e.cy === e.ny) {
+      const chosen = onArrive();
+      if (!chosen) { e.dir = null; return; }
+      e.dir = chosen;
+      e.nx = e.cx + chosen.x;
+      e.ny = e.cy + chosen.y;
+      e.t = 0;
+    }
+
+    e.t += e.speed * dt;
+    e.anim += e.speed * dt;
+
+    while (e.t >= 1) {
+      e.cx = e.nx; e.cy = e.ny;
+      e.t -= 1;
+      const chosen = onArrive();
+      if (!chosen) { e.t = 0; e.dir = null; e.nx = e.cx; e.ny = e.cy; return; }
+      e.dir = chosen;
+      e.nx = e.cx + chosen.x;
+      e.ny = e.cy + chosen.y;
+    }
+  }
+
+  function update(dt) {
+    const p = game.player;
+    const c = game.chomper;
+
+    stepEntity(p, dt, () => {
+      if (p.queued && canEnter(game.grid, p.cx + p.queued.x, p.cy + p.queued.y)) {
+        const d = p.queued;
+        p.queued = null;
+        return d;
+      }
+      if (p.dir && canEnter(game.grid, p.cx + p.dir.x, p.cy + p.dir.y)) return p.dir;
+      return null;
+    });
+
+    // Let the player turn into a corridor mid-tile if it's already open
+    if (p.queued && (p.cx !== p.nx || p.cy !== p.ny)) {
+      const q = p.queued;
+      if (p.dir && q.x === -p.dir.x && q.y === -p.dir.y) {
+        // instant reversal: swap which tile we're heading to
+        const tx = p.cx, ty = p.cy;
+        p.cx = p.nx; p.cy = p.ny;
+        p.nx = tx;   p.ny = ty;
+        p.t = 1 - p.t;
+        p.dir = q;
+        p.queued = null;
+      }
+    }
+
+    stepEntity(c, dt, () => {
+      consumePellet(c.cx, c.cy, true);
+      return chooseChomperDir();
+    });
+    c.speed = chomperSpeed();
+
+    // Keep the chomper moving even from a standstill
+    if (!c.dir && c.cx === c.nx && c.cy === c.ny) {
+      const d = chooseChomperDir();
+      if (d) { c.dir = d; c.nx = c.cx + d.x; c.ny = c.cy + d.y; c.t = 0; }
+    }
+
+    updateParticles(dt);
+
+    // Power state bookkeeping
+    const powered = performance.now() < game.powerUntil;
+    dom.powerbar.classList.toggle('is-active', powered);
+    if (powered) {
+      const left = (game.powerUntil - performance.now()) / game.powerTotal;
+      dom.powerfill.style.width = (left * 100).toFixed(1) + '%';
+    }
+
+    // Contact
+    const dx = pixelX(p) - pixelX(c);
+    const dy = pixelY(p) - pixelY(c);
+    if (Math.hypot(dx, dy) < CATCH_RADIUS) {
+      if (powered) loseLife('The chomper got you');
+      else catchChomper();
+      return;
+    }
+
+    if (game.pelletCount <= 0) loseLife('The maze is picked clean');
+  }
+
+  function catchChomper() {
+    const elapsed = performance.now() - game.levelStart;
+    const timeBonus = Math.max(0, Math.round((45000 - elapsed) / 100));
+    game.score += 500 * game.level + timeBonus;
+    audio.arpeggio([392, 523, 659, 880]);
+    spawnBurst(game.chomper.cx, game.chomper.cy, '#f2b134', 40);
+    game.level++;
+    game.mode = 'between';
+    updateHud();
+    showOverlay({
+      eyebrow: 'Cornered',
+      title: 'CAUGHT IT',
+      body: `Level ${game.level - 1} cleared with ${timeBonus} left on the clock. ` +
+            `New maze, faster chomper.`,
+      button: `Start level ${game.level}`,
+      action: () => { buildLevel(); game.mode = 'playing'; }
+    });
+  }
+
+  function loseLife(reason) {
+    game.lives--;
+    audio.sweep(320, 60, 0.5, 0.07);
+    spawnBurst(game.player.cx, game.player.cy, '#35b7a6', 26);
+    updateHud();
+
+    if (game.lives <= 0) {
+      game.mode = 'over';
+      showOverlay({
+        eyebrow: 'Game over',
+        title: 'OUT OF LIVES',
+        body: `${reason}. You reached level ${game.level} with ${game.score.toLocaleString()} points.`,
+        button: 'Play again',
+        action: startGame
+      });
+      return;
+    }
+
+    game.mode = 'between';
+    showOverlay({
+      eyebrow: `${game.lives} ${game.lives === 1 ? 'life' : 'lives'} left`,
+      title: 'IT GOT AWAY',
+      body: `${reason}. Fresh maze, same level.`,
+      button: 'Back in',
+      action: () => { buildLevel(); game.mode = 'playing'; }
+    });
+  }
+
+  /* ---------------------------------------------------------------------
+   * 10. Particles
+   * ------------------------------------------------------------------ */
+
+  function spawnBurst(tx, ty, color, count) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 40 + Math.random() * 150;
+      game.particles.push({
+        x: (tx + 0.5) * TILE,
+        y: (ty + 0.5) * TILE,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: 0.5 + Math.random() * 0.4,
+        age: 0,
+        size: 2 + Math.random() * 3,
+        color
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (let i = game.particles.length - 1; i >= 0; i--) {
+      const p = game.particles[i];
+      p.age += dt;
+      if (p.age >= p.life) { game.particles.splice(i, 1); continue; }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 220 * dt;
+    }
+  }
+
+  /* ---------------------------------------------------------------------
+   * 11. Rendering
+   * ------------------------------------------------------------------ */
+
+  /** Walls never change during a level, so bake them once into a bitmap. */
+  function renderMazeLayer(grid) {
+    const layer = document.createElement('canvas');
+    layer.width = COLS * TILE;
+    layer.height = ROWS * TILE;
+    const g = layer.getContext('2d');
+
+    g.fillStyle = '#0b0a10';
+    g.fillRect(0, 0, layer.width, layer.height);
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const px = x * TILE, py = y * TILE;
+
+        if (grid[idx(x, y)] === OPEN) {
+          // Floor: barely-there grid so corridors read as tiles
+          g.fillStyle = '#131119';
+          g.fillRect(px, py, TILE, TILE);
+          g.fillStyle = 'rgba(255,255,255,.018)';
+          g.fillRect(px, py, TILE - 1, 1);
+          continue;
+        }
+
+        // Wall block with a voxel bevel
+        g.fillStyle = '#4a4f5c';
+        g.fillRect(px, py, TILE, TILE);
+        g.fillStyle = '#676d7e';
+        g.fillRect(px, py, TILE, 3);
+        g.fillRect(px, py, 3, TILE);
+        g.fillStyle = '#2c2f38';
+        g.fillRect(px, py + TILE - 3, TILE, 3);
+        g.fillRect(px + TILE - 3, py, 3, TILE);
+
+        // Deterministic cobble speckle — same maze always looks the same
+        let h = (x * 73856093) ^ (y * 19349663);
+        for (let k = 0; k < 3; k++) {
+          h = (h * 1103515245 + 12345) & 0x7fffffff;
+          const sx = px + 4 + (h % (TILE - 10));
+          const sy = py + 4 + ((h >> 8) % (TILE - 10));
+          g.fillStyle = (h >> 16) % 2 ? 'rgba(0,0,0,.22)' : 'rgba(255,255,255,.07)';
+          g.fillRect(sx, sy, 3, 3);
+        }
+      }
+    }
+    return layer;
+  }
+
+  function drawPellets(now) {
+    const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const kind = game.pellets[idx(x, y)];
+        if (!kind) continue;
+        const cx = (x + 0.5) * TILE, cy = (y + 0.5) * TILE;
+
+        if (kind === 1) {
+          ctx.fillStyle = '#6e6552';
+          ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+        } else {
+          const r = 4 + pulse * 2;
+          ctx.fillStyle = '#f2b134';
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 0.25 * pulse;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  function drawMiner(e) {
+    const frame = MINER_FRAMES[e.dir && Math.floor(e.anim * 2) % 2 ? 1 : 0];
+    const px = 3;                     // pixel size: 8 * 3 = 24 = TILE
+    const ox = pixelX(e) - (8 * px) / 2;
+    const oy = pixelY(e) - (8 * px) / 2;
+
+    for (let row = 0; row < frame.length; row++) {
+      for (let col = 0; col < frame[row].length; col++) {
+        const color = PALETTE[frame[row][col]];
+        if (!color) continue;
+        ctx.fillStyle = color;
+        ctx.fillRect(ox + col * px, oy + row * px, px, px);
+      }
+    }
+  }
+
+  function drawChomper(e, now) {
+    const powered = now < game.powerUntil;
+    const expiring = powered && (game.powerUntil - now) < 1600;
+    const flash = expiring && Math.floor(now / 160) % 2 === 0;
+
+    const x = pixelX(e), y = pixelY(e);
+    const r = TILE * 0.42;
+    const bite = Math.abs(Math.sin(e.anim * 3.2)) * 0.62;
+    const facing = e.dir ? Math.atan2(e.dir.y, e.dir.x) : 0;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(facing);
+
+    ctx.fillStyle = powered ? (flash ? '#ece5d5' : '#e0523c') : '#f2b134';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, r, bite, Math.PI * 2 - bite);
+    ctx.closePath();
+    ctx.fill();
+
+    // Angry brow when it's the one doing the hunting
+    if (powered) {
+      ctx.strokeStyle = '#16141c';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.6, -r * 0.55);
+      ctx.lineTo(-r * 0.05, -r * 0.2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#16141c';
+    ctx.beginPath();
+    ctx.arc(r * 0.05, -r * 0.45, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    if (powered) {
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#e0523c';
+      ctx.beginPath();
+      ctx.arc(x, y, r + 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawParticles() {
+    for (const p of game.particles) {
+      ctx.globalAlpha = Math.max(0, 1 - p.age / p.life);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function render(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!game.grid) return;
+
+    ctx.drawImage(game.mazeLayer, 0, 0);
+    drawPellets(now);
+    drawChomper(game.chomper, now);
+    drawMiner(game.player);
+    drawParticles();
+  }
+
+  /* ---------------------------------------------------------------------
+   * 12. HUD + overlay
+   * ------------------------------------------------------------------ */
+
+  function updateHud() {
+    dom.score.textContent = game.score.toLocaleString();
+    dom.level.textContent = game.level;
+    dom.pellets.textContent = Math.max(0, game.pelletCount);
+    dom.lives.textContent = '\u25A0'.repeat(Math.max(0, game.lives)) || '\u2014';
+    dom.lives.setAttribute('aria-label', `${Math.max(0, game.lives)} lives remaining`);
+  }
+
+  let overlayAction = null;
+
+  function showOverlay({ eyebrow, title, body, button, action }) {
+    dom.eyebrow.textContent = eyebrow;
+    dom.title.textContent = title;
+    dom.body.textContent = body;
+    dom.button.textContent = button;
+    overlayAction = action;
+    dom.overlay.hidden = false;
+    dom.button.focus({ preventScroll: true });
+  }
+
+  function hideOverlay() {
+    dom.overlay.hidden = true;
+  }
+
+  dom.button.addEventListener('click', () => {
+    audio.ensure();
+    hideOverlay();
+    if (overlayAction) overlayAction();
+  });
+
+  /* ---------------------------------------------------------------------
+   * 13. Input
+   * ------------------------------------------------------------------ */
+
+  const KEYMAP = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    w: 'up', s: 'down', a: 'left', d: 'right',
+    W: 'up', S: 'down', A: 'left', D: 'right'
+  };
+
+  function steer(name) {
+    const d = DIRS.find(v => v.name === name);
+    if (!d || !game.player) return;
+    game.player.queued = d;
+    // Nudge a stationary player into motion right away
+    if (!game.player.dir && canEnter(game.grid, game.player.cx + d.x, game.player.cy + d.y)) {
+      game.player.dir = d;
+      game.player.nx = game.player.cx + d.x;
+      game.player.ny = game.player.cy + d.y;
+      game.player.t = 0;
+      game.player.queued = null;
+    }
+  }
+
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === ' ' || ev.key === 'p' || ev.key === 'P') {
+      ev.preventDefault();
+      togglePause();
+      return;
+    }
+    const name = KEYMAP[ev.key];
+    if (!name) return;
+    ev.preventDefault();
+    audio.ensure();
+    steer(name);
+  }, { passive: false });
+
+  document.querySelectorAll('.dpad__btn').forEach(btn => {
+    const fire = (ev) => { ev.preventDefault(); audio.ensure(); steer(btn.dataset.dir); };
+    btn.addEventListener('pointerdown', fire);
+  });
+
+  // Swipe
+  let touchStart = null;
+  canvas.addEventListener('touchstart', (ev) => {
+    audio.ensure();
+    touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+  }, { passive: true });
+
+  canvas.addEventListener('touchend', (ev) => {
+    if (!touchStart) return;
+    const t = ev.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    if (Math.hypot(dx, dy) < 22) { touchStart = null; return; }
+    steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+    touchStart = null;
+  }, { passive: true });
+
+  /* ---------------------------------------------------------------------
+   * 14. Switches
+   * ------------------------------------------------------------------ */
+
+  dom.sound.addEventListener('click', () => {
+    audio.on = !audio.on;
+    dom.sound.textContent = `Sound: ${audio.on ? 'on' : 'off'}`;
+    dom.sound.setAttribute('aria-pressed', String(audio.on));
+    if (audio.on) { audio.ensure(); audio.blip(660, 0.08); }
+  });
+
+  function togglePause() {
+    if (game.mode === 'playing') {
+      game.mode = 'paused';
+      showOverlay({
+        eyebrow: 'Paused',
+        title: 'HOLD UP',
+        body: 'The chomper is waiting. So are the pellets.',
+        button: 'Resume',
+        action: () => { game.mode = 'playing'; }
+      });
+    } else if (game.mode === 'paused') {
+      hideOverlay();
+      game.mode = 'playing';
+    }
+  }
+
+  dom.pause.addEventListener('click', togglePause);
+
+  dom.restart.addEventListener('click', () => {
+    audio.ensure();
+    hideOverlay();
+    startGame();
+  });
+
+  /* ---------------------------------------------------------------------
+   * 15. Boot + loop
+   * ------------------------------------------------------------------ */
+
+  function startGame() {
+    game.score = 0;
+    game.level = 1;
+    game.lives = START_LIVES;
+    buildLevel();
+    game.mode = 'playing';
+    hideOverlay();
+  }
+
+  function frame(now) {
+    const dt = Math.min((now - game.lastFrame) / 1000, 0.05);
+    game.lastFrame = now;
+
+    if (game.mode === 'playing') update(dt);
+    render(now);
+
+    requestAnimationFrame(frame);
+  }
+
+  // Draw something behind the title card so the screen isn't empty
+  buildLevel();
+  game.score = 0;
+  game.level = 1;
+  updateHud();
+  game.lastFrame = performance.now();
+
+  showOverlay({
+    eyebrow: 'Insert coin',
+    title: 'BLOCK HUNTER',
+    body: 'The chomper is eating your maze. Corner it before the last pellet goes. ' +
+          'Gold pellets flip the hunt — for a few seconds it comes after you.',
+    button: 'Start hunting',
+    action: startGame
+  });
+
+  requestAnimationFrame(frame);
+
+  /* Exposed on purpose. Open devtools and try `BlockHunter.state.lives = 99`,
+     or read `BlockHunter.flood(...)` to see what the chomper sees. */
+  window.BlockHunter = {
+    state: game,
+    steer,
+    flood,
+    generateMaze,
+    config: { TILE, COLS, ROWS, PLAYER_SPEED, CHOMPER_SPEED_CAP }
+  };
+
+})();
+</script>
+</body>
+</html>
