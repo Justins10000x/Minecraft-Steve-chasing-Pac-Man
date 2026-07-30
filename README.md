@@ -8,9 +8,9 @@ The whole game is one HTML file. No dependencies, no build step, no bundler. Ope
 
 ## Play
 
-Open `index.html` in a browser. That's genuinely it.
+Open `index.html` in a browser. That's  it.
 
-If you'd rather serve it over HTTP:
+If you want it over HTTP:
 
 ```bash
 python3 -m http.server 8000
@@ -122,6 +122,10 @@ It's a static site, so it'll be live at `https://<your-username>.github.io/Minec
 The miner and the chomper are original pixel art, drawn from the palette and character grid in the script rather than ripped from anywhere. Nothing here needs licensing or attribution, and the game is a homage rather than a copy — the mechanics are inverted, the maze is procedural, and the art is its own thing.
 
 ---
+
+This is the file for V1.1.1 of the game, this won't be updated frequently, I've got too much going on in life. If i ever do go clear, perhaps I'll launch it someday. Love 
+
+--- 
 
 ## License
 
