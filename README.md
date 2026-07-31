@@ -1,4 +1,4 @@
-# Minecraft Steve chasing Pac-Man
+# Minecraft Steve chasing Pac-Man (Block Hunter)
 
 A blocky miner hunts a pellet-munching chomper through a procedurally generated maze. The chomper is trying to eat the level clean and escape. You're trying to corner it first. Grab a gold pellet and the hunt flips: for a few seconds, it comes after you.
 
