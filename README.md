@@ -6,7 +6,7 @@ The whole game is one HTML file. No dependencies, no build step, no bundler. Ope
 
 ## Play
 
-Open `index.html` in a browser. That's  it.
+Open `index.html` in a browser. That's it.
 
 If you want it over HTTP:
 
